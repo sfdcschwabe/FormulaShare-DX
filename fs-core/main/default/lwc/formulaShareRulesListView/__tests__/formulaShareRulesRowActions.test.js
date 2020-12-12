@@ -7,7 +7,7 @@ import { getTreeGridData } from '@salesforce/apex/FormulaShareRulesListViewCont
 // Use a mocked navigation plugin.
 // See fs-core/test/jest-mocks/lightning/navigation.js for the mock
 // and see jest.config.js for jest config to use the mock
-//import { getNavigateCalledWith } from 'lightning/navigation';
+import { getGenerateUrlCalledWith } from 'lightning/navigation';
 
 // Use a mocked navigation plugin.
 // fs-core/test/jest-mocks/lightning/platformShowToastEvent.js for the mock
@@ -193,6 +193,10 @@ describe('c-formula-share-rules-list-view', () => {
     });
 
     it('Test navigate to report (Positive).', () => {
+        const NAV_TYPE = 'standard__recordPage';
+        const OBJECT_API_NAME = 'Report';
+        const ACTION_NAME = 'view';
+
         // https://salesforce.stackexchange.com/questions/285021/lightning-web-component-unit-testing-issue-with-testing-row-action-event
         jest.spyOn(window, 'open').mockReturnValue();
 
@@ -208,6 +212,7 @@ describe('c-formula-share-rules-list-view', () => {
         // Return a promise to wait for any asynchronous DOM updates. Jest
         // will automatically wait for the Promise chain to complete before
         // ending the test and fail the test if the promise rejects.
+        var firstRowOfFirstChild;
         return Promise.resolve().then(() => {
             // Select ligthning-tree-grid.
             const treeGrid = element.shadowRoot.querySelector('lightning-tree-grid');
@@ -215,7 +220,7 @@ describe('c-formula-share-rules-list-view', () => {
             const parents = treeGrid.data;
             // Get first child of first parent.
             const firstChild = parents[0]._children;
-            const firstRowOfFirstChild = firstChild[0];
+            firstRowOfFirstChild = firstChild[0];
 
             const rowActionEvent = new CustomEvent(
                 "rowaction", {
@@ -224,13 +229,34 @@ describe('c-formula-share-rules-list-view', () => {
                         row: firstRowOfFirstChild
                     }
             });
-            
+
             // Trigger row action in lightning-tree-grid.
             treeGrid.dispatchEvent(rowActionEvent);
         })
         .then(() => {
-            // Verify window.open was executed.
+
+            // Check the NavigationMixin function called with correct parameter
+            const { pageReference } = getGenerateUrlCalledWith();
+            console.log('pageref: '+JSON.stringify(pageReference));
+            console.log('firstRowOfFirstChild: '+JSON.stringify(firstRowOfFirstChild));
+
+            // Verify component called with correct event type and params
+            expect(pageReference.type).toBe(NAV_TYPE);
+            expect(pageReference.attributes.objectApiName).toBe(OBJECT_API_NAME);
+            expect(pageReference.attributes.actionName).toBe(ACTION_NAME);
+            expect(pageReference.attributes.recordId).toBe(firstRowOfFirstChild.recordLogsReportId);
+            expect(pageReference.state.fv0).toBe(encodeURI(firstRowOfFirstChild.developerName));
+
+            // Our test data had a lastBatchId, so check relevant parameters set
+            expect(pageReference.state.fv1).toBe(encodeURI(firstRowOfFirstChild.lastBatchId));
+            expect(pageReference.state.fv2).toBe(encodeURI(firstRowOfFirstChild.batchFinishEpoch));
+
+            // Verify window.open was executed
             expect(window.open).toHaveBeenCalledTimes(1);
+            
+            // Since NavigationMixin was mocked it's probably not appropriate to verify the parameter passed to window.open
+            // If we wanted to do this though the line below would work
+            // expect(window.open).toHaveBeenCalledWith('https://www.example.com');
         });
     });
 });
